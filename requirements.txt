@@ -1,9 +1,9 @@
 # fastapi
 # uvicorn[standard]
 # pydantic
-# numpy
-# opencv-python-headless
-# Pillow
+numpy
+opencv-python-headless
+Pillow
 # ultralytics
 # insightface
 # scrfd
