@@ -1,12 +1,16 @@
-fastapi
-uvicorn[standard]
-pydantic
-numpy
-opencv-python-headless
-Pillow
-ultralytics
-insightface
-scrfd
-mediapipe
+# fastapi
+# uvicorn[standard]
+# pydantic
+# numpy
+# opencv-python-headless
+# Pillow
+# ultralytics
+# insightface
+# scrfd
+# mediapipe
+# streamlit
+# requests
+
+
 streamlit
 requests
