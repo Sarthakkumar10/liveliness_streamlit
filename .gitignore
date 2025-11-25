@@ -1,0 +1,6 @@
+app.zip
+.venv
+.vscode
+__pycache__
+*.pt
+*.onnx
