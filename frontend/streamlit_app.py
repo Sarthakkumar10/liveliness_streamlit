@@ -8,7 +8,7 @@ from PIL import Image
 import io
 
 # BACKEND_URL = "http://localhost:8000/analyze_frame"
-BACKEND_URL = "https://8df777e13171.ngrok-free.app/analyze_frame"
+BACKEND_URL = "https://cfcaa669d02b.ngrok-free.app/analyze_frame"
 
 st.set_page_config(layout="wide", page_title="Face+Phone Validator")
 
