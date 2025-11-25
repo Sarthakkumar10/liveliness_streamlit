@@ -8,7 +8,7 @@ from PIL import Image
 import io
 
 # BACKEND_URL = "http://localhost:8000/analyze_frame"
-BACKEND_URL = "https://cfcaa669d02b.ngrok-free.app/analyze_frame"
+BACKEND_URL = "https://9662d512c2f4.ngrok-free.app/analyze_frame"
 
 st.set_page_config(layout="wide", page_title="Face+Phone Validator")
 
@@ -79,6 +79,12 @@ if st.button("Send to backend"):
         debug_md += f"- phone_detected: {data.get('phone_detected')}\n"
         if data.get("phone_confidence") is not None:
             debug_md += f"- phone_confidence: {data.get('phone_confidence'):.2f}\n"
+        spoof_status = data.get("spoof_status")
+        spoof_conf = data.get("spoof_confidence")
+
+        debug_md += f"- spoof_status: {spoof_status}\n"
+        if spoof_conf is not None:
+            debug_md += f"- spoof_confidence: {spoof_conf:.2f}\n"
         debug_md += "\n**Raw reasons object:**\n"
         debug_md += f"```\n{reasons}\n```\n"
 

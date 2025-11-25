@@ -21,6 +21,7 @@ import uvicorn
 # ML libraries
 from ultralytics import YOLO
 import mediapipe as mp
+import requests
 
 # SCRFD import
 try:
@@ -91,6 +92,8 @@ class AnalyzeResult(BaseModel):
     phone_detected: bool
     phone_confidence: Optional[float]
     processed_image_base64: Optional[str]
+    spoof_status: Optional[str] = None
+    spoof_confidence: Optional[float] = None
 
 
 # ============================================================
@@ -136,6 +139,36 @@ def save_processed_image(img_bgr, final_valid, phone_detected, prefix="img"):
 
     cv2.imwrite(save_path, img_bgr)
     return save_path
+
+def run_neuroverify_api(image_bytes: bytes):
+    print("[backend] Running NeuroVerify API for spoof detection...")
+    url = "https://neuroverify.neuraldefend.com/detect/liveness-image"
+    headers = {
+        "x-api-key": "trulymadly569NVB59NFBN9nfvTESTING"
+    }
+
+    files = {
+        "file": ("image.jpg", image_bytes, "image/jpeg")
+    }
+
+    try:
+        response = requests.post(url, headers=headers, files=files, timeout=15)
+        print(f"[backend] NeuroVerify response status: {response.text}")
+
+        if response.status_code != 200:
+            return "ERROR", 0.0
+
+        data = response.json()
+        tag = data["image_analysis"]["prediction_tag"]
+        confidence = data["image_analysis"]["liveness_check"]["confidence"]
+
+        if tag.upper() == "SPOOF":
+            return "SPOOF", confidence
+        else:
+            return "REAL", confidence
+
+    except Exception:
+        return "ERROR", 0.0
 
 
 # ============================================================
@@ -517,10 +550,48 @@ async def analyze_frame(file: UploadFile = File(...)):
     # --------------------------------------------------------
     final_valid = (not phone_detected)
 
+
+    # --------------------------------------------------------
+    # 6. SPOOF CHECK (ONLY IF PHONE NOT DETECTED)
+    # --------------------------------------------------------
+    spoof_status = "REAL"
+    spoof_conf = 0.0
+
+    if not phone_detected:
+        # send cropped face instead of full image
+        _, crop_buffer = cv2.imencode(".jpg", crop)
+        crop_bytes = crop_buffer.tobytes()
+
+        spoof_status, spoof_conf = run_neuroverify_api(crop_bytes)
+
+        # if API failed → default to REAL
+        if spoof_status == "ERROR":
+            spoof_status = "REAL"
+            spoof_conf = 0.0
+
+        if spoof_status == "SPOOF":
+            final_valid = False
+            reasons["liveness"] = "spoof_detected"
+        else:
+            final_valid = True and (not phone_detected)
+
+    else:
+        # phone detected → no spoof check
+        spoof_status = "SKIPPED"
+
     proc_img = draw_boxes_and_yolo_plot(img, (x1,y1,x2,y2), (ex1,ey1,ex2,ey2), results)
     b64 = imencode_to_base64(proc_img)
 
     save_processed_image(proc_img, final_valid=final_valid, phone_detected=phone_detected, prefix="processed")
+    if phone_detected:
+        clean_spoof = "NONE"
+    else:
+        if spoof_status == "SPOOF":
+            clean_spoof = "SPOOF"
+        elif spoof_status == "REAL":
+            clean_spoof = "REAL"
+        else:
+            clean_spoof = "NONE"   # default fallback
 
     # --------------------------------------------------------
     # RETURN FINAL RESULT
@@ -534,7 +605,9 @@ async def analyze_frame(file: UploadFile = File(...)):
         num_faces=num_faces,
         phone_detected=phone_detected,
         phone_confidence=phone_conf if phone_detected else None,
-        processed_image_base64=b64
+        processed_image_base64=b64,
+        spoof_status=clean_spoof,
+        spoof_confidence=None
     )
 
 
