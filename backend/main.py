@@ -558,13 +558,12 @@ async def analyze_frame(file: UploadFile = File(...)):
     spoof_conf = 0.0
 
     if not phone_detected:
-        # send cropped face instead of full image
-        _, crop_buffer = cv2.imencode(".jpg", crop)
-        crop_bytes = crop_buffer.tobytes()
+        # send FULL image now
+        _, full_buffer = cv2.imencode(".jpg", img)
+        full_bytes = full_buffer.tobytes()
 
-        spoof_status, spoof_conf = run_neuroverify_api(crop_bytes)
+        spoof_status, spoof_conf = run_neuroverify_api(full_bytes)
 
-        # if API failed → default to REAL
         if spoof_status == "ERROR":
             spoof_status = "REAL"
             spoof_conf = 0.0
@@ -574,10 +573,9 @@ async def analyze_frame(file: UploadFile = File(...)):
             reasons["liveness"] = "spoof_detected"
         else:
             final_valid = True and (not phone_detected)
-
     else:
-        # phone detected → no spoof check
         spoof_status = "SKIPPED"
+
 
     proc_img = draw_boxes_and_yolo_plot(img, (x1,y1,x2,y2), (ex1,ey1,ex2,ey2), results)
     b64 = imencode_to_base64(proc_img)
