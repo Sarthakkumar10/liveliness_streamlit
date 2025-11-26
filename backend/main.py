@@ -41,6 +41,7 @@ SAVE_ROOT = "saved"
 VALID_DIR = os.path.join(SAVE_ROOT, "valid")
 INVALID_DIR = os.path.join(SAVE_ROOT, "invalid")
 PHONE_DIR = os.path.join(SAVE_ROOT, "phone_detected")
+PHONE_CONFIDENCE_THRESHOLD = 0.45
 
 os.makedirs(VALID_DIR, exist_ok=True)
 os.makedirs(INVALID_DIR, exist_ok=True)
@@ -59,7 +60,7 @@ PITCH_THRESH = 31
 ROLL_THRESH = 30
 
 BRIGHT_LOW = 50
-BRIGHT_HIGH = 200
+BRIGHT_HIGH = 150
 
 BLUR_THRESHOLD = 50.0
 
@@ -125,20 +126,34 @@ def rotation_matrix_to_angles(R):
     z = math.atan2(R[1, 0], R[0, 0])
     return np.degrees([x, y, z]).tolist()
 
+def save_processed_image(img_bgr_processed, img_bgr_original, final_valid, phone_detected, prefix="img"):
+    """
+    Save both:
+        1. Processed image (with boxes)
+        2. Original image (suffix "_ori")
 
-def save_processed_image(img_bgr, final_valid, phone_detected, prefix="img"):
-    """Save processed output image into categorized folders."""
+    Into:
+        saved/valid/
+        saved/invalid/
+        saved/phone_detected/
+    """
     ts = int(time.time())
 
     if phone_detected:
-        save_path = os.path.join(PHONE_DIR, f"{prefix}_{ts}.jpg")
+        folder = PHONE_DIR
     elif final_valid:
-        save_path = os.path.join(VALID_DIR, f"{prefix}_{ts}.jpg")
+        folder = VALID_DIR
     else:
-        save_path = os.path.join(INVALID_DIR, f"{prefix}_{ts}.jpg")
+        folder = INVALID_DIR
 
-    cv2.imwrite(save_path, img_bgr)
-    return save_path
+    processed_path = os.path.join(folder, f"{prefix}_{ts}.jpg")
+    original_path  = os.path.join(folder, f"{prefix}_{ts}_ori.jpg")
+
+    cv2.imwrite(processed_path, img_bgr_processed)
+    cv2.imwrite(original_path, img_bgr_original)
+
+    return processed_path, original_path
+
 
 def run_neuroverify_api(image_bytes: bytes):
     print("[backend] Running NeuroVerify API for spoof detection...")
@@ -280,31 +295,6 @@ def draw_boxes_and_yolo_plot(img_bgr, face_bbox=None, expanded_bbox=None, yolo_r
 # PART 3 / 3 — API Endpoint + Saving Logic + Run Server
 # ============================================================
 
-
-# ------------------------------------------------------------
-# Helper: Save processed image into proper folder
-# ------------------------------------------------------------
-def save_processed_image(img_bgr, final_valid, phone_detected, prefix="img"):
-    """
-    Save processed output into:
-        saved/valid/
-        saved/invalid/
-        saved/phone_detected/
-    """
-
-    ts = int(time.time())
-
-    if phone_detected:
-        save_path = os.path.join(PHONE_DIR, f"{prefix}_{ts}.jpg")
-    elif final_valid:
-        save_path = os.path.join(VALID_DIR, f"{prefix}_{ts}.jpg")
-    else:
-        save_path = os.path.join(INVALID_DIR, f"{prefix}_{ts}.jpg")
-
-    cv2.imwrite(save_path, img_bgr)
-    return save_path
-
-
 # ------------------------------------------------------------
 # API: Upload Frame → Validate Face → Check Phone
 # ------------------------------------------------------------
@@ -349,7 +339,13 @@ async def analyze_frame(file: UploadFile = File(...)):
         proc_img = img.copy()
 
         b64 = imencode_to_base64(proc_img)
-        save_processed_image(proc_img, final_valid=False, phone_detected=False, prefix="invalid")
+        save_processed_image(
+            img_bgr_processed=proc_img,
+            img_bgr_original=img,
+            final_valid=final_valid,
+            phone_detected=phone_detected,
+            prefix="invalid"
+        )
 
         return AnalyzeResult(
             final_valid=False,
@@ -368,7 +364,13 @@ async def analyze_frame(file: UploadFile = File(...)):
         proc_img = img.copy()
 
         b64 = imencode_to_base64(proc_img)
-        save_processed_image(proc_img, final_valid=False, phone_detected=False, prefix="invalid")
+        save_processed_image(
+            img_bgr_processed=proc_img,
+            img_bgr_original=img,
+            final_valid=final_valid,
+            phone_detected=phone_detected,
+            prefix="invalid"
+        )
 
         return AnalyzeResult(
             final_valid=False,
@@ -402,7 +404,13 @@ async def analyze_frame(file: UploadFile = File(...)):
 
         proc_img = draw_boxes_and_yolo_plot(img, (x1,y1,x2,y2), None)
         b64 = imencode_to_base64(proc_img)
-        save_processed_image(proc_img, final_valid=False, phone_detected=False, prefix="invalid")
+        save_processed_image(
+            img_bgr_processed=proc_img,
+            img_bgr_original=img,
+            final_valid=final_valid,
+            phone_detected=phone_detected,
+            prefix="invalid"
+        )
 
         return AnalyzeResult(
             final_valid=False,
@@ -420,8 +428,8 @@ async def analyze_frame(file: UploadFile = File(...)):
     # 3. Expanded 10% Crop (Brightness/Blur)
     # --------------------------------------------------------
     fw, fh = x2 - x1, y2 - y1
-    margin_x10 = int(fw * 0.10)
-    margin_y10 = int(fh * 0.10)
+    margin_x10 = int(fw * 0.05)
+    margin_y10 = int(fh * 0.05)
 
     ex1 = max(0, x1 - margin_x10)
     ey1 = max(0, y1 - margin_y10)
@@ -437,7 +445,13 @@ async def analyze_frame(file: UploadFile = File(...)):
 
         proc_img = draw_boxes_and_yolo_plot(img, (x1,y1,x2,y2), (ex1,ey1,ex2,ey2))
         b64 = imencode_to_base64(proc_img)
-        save_processed_image(proc_img, final_valid=False, phone_detected=False, prefix="invalid")
+        save_processed_image(
+            img_bgr_processed=proc_img,
+            img_bgr_original=img,
+            final_valid=final_valid,
+            phone_detected=phone_detected,
+            prefix="invalid"
+        )
 
         return AnalyzeResult(
             final_valid=False,
@@ -460,7 +474,13 @@ async def analyze_frame(file: UploadFile = File(...)):
         proc_img = draw_boxes_and_yolo_plot(img, (x1,y1,x2,y2), (ex1,ey1,ex2,ey2))
 
         b64 = imencode_to_base64(proc_img)
-        save_processed_image(proc_img, final_valid=False, phone_detected=False, prefix="invalid")
+        save_processed_image(
+            img_bgr_processed=proc_img,
+            img_bgr_original=img,
+            final_valid=final_valid,
+            phone_detected=phone_detected,
+            prefix="invalid"
+        )
 
         return AnalyzeResult(
             final_valid=False,
@@ -483,7 +503,13 @@ async def analyze_frame(file: UploadFile = File(...)):
         proc_img = draw_boxes_and_yolo_plot(img, (x1,y1,x2,y2), (ex1,ey1,ex2,ey2))
 
         b64 = imencode_to_base64(proc_img)
-        save_processed_image(proc_img, final_valid=False, phone_detected=False, prefix="invalid")
+        save_processed_image(
+            img_bgr_processed=proc_img,
+            img_bgr_original=img,
+            final_valid=final_valid,
+            phone_detected=phone_detected,
+            prefix="invalid"
+        )
 
         return AnalyzeResult(
             final_valid=False,
@@ -504,6 +530,31 @@ async def analyze_frame(file: UploadFile = File(...)):
 
     reasons["pose"] = {"pitch": pitch, "yaw": yaw, "roll": roll, "frontal": frontal}
 
+    if (pitch is None) or (yaw is None) or (roll is None):
+        reasons["face"] = "pose_detection_failed"
+
+        proc_img = draw_boxes_and_yolo_plot(img, (x1,y1,x2,y2), (ex1,ey1,ex2,ey2))
+        b64 = imencode_to_base64(proc_img)
+        save_processed_image(
+            img_bgr_processed=proc_img,
+            img_bgr_original=img,
+            final_valid=final_valid,
+            phone_detected=phone_detected,
+            prefix="invalid"
+        )
+
+        return AnalyzeResult(
+            final_valid=False,
+            reasons=reasons,
+            brightness=brightness,
+            blurriness=blurriness,
+            pose=(pitch, yaw, roll),
+            num_faces=num_faces,
+            phone_detected=False,
+            phone_confidence=None,
+            processed_image_base64=b64
+        )
+
     if not frontal:
         failed = []
         if abs(yaw) > YAW_THRESH: failed.append("yaw_exceeded")
@@ -514,7 +565,13 @@ async def analyze_frame(file: UploadFile = File(...)):
 
         proc_img = draw_boxes_and_yolo_plot(img, (x1,y1,x2,y2), (ex1,ey1,ex2,ey2))
         b64 = imencode_to_base64(proc_img)
-        save_processed_image(proc_img, final_valid=False, phone_detected=False, prefix="invalid")
+        save_processed_image(
+            img_bgr_processed=proc_img,
+            img_bgr_original=img,
+            final_valid=final_valid,
+            phone_detected=phone_detected,
+            prefix="invalid"
+        )
 
         return AnalyzeResult(
             final_valid=False,
@@ -538,9 +595,11 @@ async def analyze_frame(file: UploadFile = File(...)):
         cls = int(box.cls)
         conf = float(box.conf)
         label = yolo.names[cls].lower()
+
         if "phone" in label:
+            if conf >= PHONE_CONFIDENCE_THRESHOLD:
+                phone_detected = True
             phone_conf = max(phone_conf, conf)
-            phone_detected = True
 
     reasons["phone_detected"] = phone_detected
     reasons["phone_confidence"] = phone_conf
@@ -580,7 +639,13 @@ async def analyze_frame(file: UploadFile = File(...)):
     proc_img = draw_boxes_and_yolo_plot(img, (x1,y1,x2,y2), (ex1,ey1,ex2,ey2), results)
     b64 = imencode_to_base64(proc_img)
 
-    save_processed_image(proc_img, final_valid=final_valid, phone_detected=phone_detected, prefix="processed")
+    save_processed_image(
+            img_bgr_processed=proc_img,
+            img_bgr_original=img,
+            final_valid=final_valid,
+            phone_detected=phone_detected,
+            prefix="processed"
+        )
     if phone_detected:
         clean_spoof = "NONE"
     else:
